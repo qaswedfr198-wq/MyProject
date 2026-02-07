@@ -1,9 +1,12 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 import google.generativeai as genai
 import os
+import json
+import io
+from PIL import Image
 from dotenv import load_dotenv
 
 # 讀取環境變數
@@ -98,6 +101,49 @@ async def recommend(request: RecommendRequest):
         return {"recommendation": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
+
+@app.post("/vision")
+async def vision_recognition(file: UploadFile = File(...)):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server")
+    
+    try:
+        # 讀取並開啟上傳的圖片
+        image_data = await file.read()
+        img = Image.open(io.BytesIO(image_data))
+        
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = """
+        Analyze this image of food or groceries. 
+        Identify the main item and provide:
+        1. Item Name (English and Traditional Chinese)
+        2. Suggested Quantity (integer)
+        3. Estimated Expiry Days (integer from today, e.g., 7 for a week)
+        4. Suggested Storage Area (e.g., Refrigerator, Pantry, Freezer)
+
+        Return ONLY a JSON object in this format:
+        {
+            "name": "中文名稱",
+            "name_en": "English Name",
+            "quantity": 1,
+            "expiry_days": 7,
+            "area": "Refrigerator"
+        }
+        """
+        
+        response = await model.generate_content_async([prompt, img])
+        
+        # 清理回應內容
+        clean_text = response.text.strip()
+        if clean_text.startswith("```"):
+            clean_text = clean_text.split("```")[1]
+            if clean_text.startswith("json"):
+                clean_text = clean_text[4:].strip()
+        
+        return json.loads(clean_text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Vision AI Error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
