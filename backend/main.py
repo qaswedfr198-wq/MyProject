@@ -17,16 +17,18 @@ app = FastAPI(title="Home Assistant AI Backend")
 # 加入 CORS 支援
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 允許所有來源，開發階段較方便
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 配置 Gemini
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+def configure_genai():
+    api_key = os.getenv("GEMINI_API_KEY")
+    if api_key:
+        genai.configure(api_key=api_key)
+        return api_key
+    return None
 
 # 定義資料格式
 class ChatRequest(BaseModel):
@@ -44,9 +46,12 @@ async def root():
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
-    if not GEMINI_API_KEY:
+    api_key = configure_genai()
+    if not api_key:
+        print("[ERROR] GEMINI_API_KEY IS MISSING IN ENVIRONMENT.")
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server")
     
+    print(f"[INFO] New chat request: {request.message[:30]}...")
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = f"""
@@ -68,15 +73,20 @@ async def chat(request: ChatRequest):
     
     try:
         response = await model.generate_content_async(prompt)
+        print("[INFO] AI Chat response successful.")
         return {"response": response.text}
     except Exception as e:
+        print(f"[ERROR] AI Chat Exception: {str(e)}")
         raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
 
 @app.post("/recommend")
 async def recommend(request: RecommendRequest):
-    if not GEMINI_API_KEY:
+    api_key = configure_genai()
+    if not api_key:
+        print("[ERROR] GEMINI_API_KEY IS MISSING IN ENVIRONMENT.")
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server")
     
+    print("[INFO] New recommendation request.")
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = f"""
@@ -98,17 +108,21 @@ async def recommend(request: RecommendRequest):
     
     try:
         response = await model.generate_content_async(prompt)
+        print("[INFO] AI Recommendation successful.")
         return {"recommendation": response.text}
     except Exception as e:
+        print(f"[ERROR] AI Recommend Exception: {str(e)}")
         raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
 
 @app.post("/vision")
 async def vision_recognition(file: UploadFile = File(...)):
-    if not GEMINI_API_KEY:
+    api_key = configure_genai()
+    if not api_key:
+        print("[ERROR] GEMINI_API_KEY IS MISSING IN ENVIRONMENT.")
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server")
     
+    print(f"[INFO] New vision request: {file.filename}")
     try:
-        # 讀取並開啟上傳的圖片
         image_data = await file.read()
         img = Image.open(io.BytesIO(image_data))
         
@@ -134,15 +148,16 @@ async def vision_recognition(file: UploadFile = File(...)):
         
         response = await model.generate_content_async([prompt, img])
         
-        # 清理回應內容
         clean_text = response.text.strip()
         if clean_text.startswith("```"):
             clean_text = clean_text.split("```")[1]
             if clean_text.startswith("json"):
                 clean_text = clean_text[4:].strip()
         
+        print(f"[INFO] Vision AI response: {clean_text[:50]}...")
         return json.loads(clean_text)
     except Exception as e:
+        print(f"[ERROR] Vision AI Exception: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Vision AI Error: {str(e)}")
 
 if __name__ == "__main__":
