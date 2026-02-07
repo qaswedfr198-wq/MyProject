@@ -51,8 +51,8 @@ async def chat(request: ChatRequest):
         print("[ERROR] GEMINI_API_KEY IS MISSING IN ENVIRONMENT.")
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server")
     
-    print(f"[INFO] New chat request: {request.message[:30]}...")
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    print(f"[INFO] New chat request (Gemini 2.5 Flash): {request.message[:30]}...")
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     prompt = f"""
     You are a helpful Home Assistant specializing in Inventory and Nutrition management.
@@ -86,8 +86,8 @@ async def recommend(request: RecommendRequest):
         print("[ERROR] GEMINI_API_KEY IS MISSING IN ENVIRONMENT.")
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server")
     
-    print("[INFO] New recommendation request.")
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    print("[INFO] New recommendation request (Gemini 2.5 Flash).")
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     prompt = f"""
     You are a professional Nutritionist and Home Manager AI.
@@ -121,12 +121,12 @@ async def vision_recognition(file: UploadFile = File(...)):
         print("[ERROR] GEMINI_API_KEY IS MISSING IN ENVIRONMENT.")
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server")
     
-    print(f"[INFO] New vision request: {file.filename}")
+    print(f"[INFO] New vision request (Gemini 2.5 Flash): {file.filename}")
     try:
         image_data = await file.read()
         img = Image.open(io.BytesIO(image_data))
         
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         prompt = """
         Analyze this image of food or groceries. 
