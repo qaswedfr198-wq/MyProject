@@ -1,0 +1,9 @@
+kivymd
+kivy
+plyer
+pillow
+google-generativeai
+requests
+certifi
+psycopg2-binary
+python-dotenv

@@ -1,0 +1,13 @@
+程式語言 Python
+資料格式 SQL
+
+姓名 name
+年紀 age
+性別 gender
+過敏源 allergens
+遺傳病 genetic
+食物名稱 foodname
+數量quantity
+有效期限date
+購買日期buydate
+區域area
