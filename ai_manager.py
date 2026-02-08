@@ -58,18 +58,23 @@ def recognize_food_from_image(image_path):
         print(f"Vision AI 連線錯誤: {e}")
         return None
 
-def get_calorie_estimation(food_name):
+def estimate_calories(food_name):
     """
-    從雲端後端取得食物熱量估算
+    估算食物卡路里，回傳整數
     """
-    url = f"{BACKEND_URL}/estimate_calories"
-    payload = {"food_name": food_name}
+    prompt = f"Estimate calories for '{food_name}'. Return ONLY the integer number (e.g. 300). Do not return any text."
+    # Use empty context as we only need general knowledge
+    response = get_ai_chat_response(prompt, "", "")
     
+    # Try to parse integer from response
     try:
-        response = requests.post(url, json=payload, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        return data.get("calories", 0)
-    except Exception as e:
-        print(f"熱量估算連線錯誤: {e}")
+        import re
+        # Find all number sequences
+        digits = re.findall(r'\d+', response)
+        if digits:
+            # Return the first number found
+            return int(digits[0])
+        else:
+            return None
+    except:
         return None

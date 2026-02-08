@@ -30,7 +30,7 @@ from kivymd.uix.toolbar import MDTopAppBar
 from kivymd.uix.card import MDCard
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.textfield import MDTextField
-from kivymd.uix.list import MDList, OneLineAvatarIconListItem, IconRightWidget
+from kivymd.uix.list import MDList, OneLineAvatarIconListItem, TwoLineAvatarIconListItem, IconRightWidget
 from kivymd.uix.scrollview import MDScrollView
 
 import ai_manager
@@ -71,12 +71,9 @@ class DatabaseManager:
             id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, meal_type TEXT, calories INTEGER, note TEXT)''')
         self._execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
 
-    def save_api_key(self, key):
-        self._execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('gemini_api_key', key))
 
     def get_api_key(self):
-        res = self._execute('SELECT value FROM settings WHERE key = ?', ('gemini_api_key',), fetch_one=True)
-        return res[0] if res else None
+        return None # No longer used
 
     def add_record(self, meal, cal, note=""):
         today = datetime.now().strftime('%Y-%m-%d')
@@ -92,7 +89,8 @@ class DatabaseManager:
 
     def get_today_records(self):
         today = datetime.now().strftime('%Y-%m-%d')
-        return self._execute('SELECT id, meal_type, calories, note FROM records WHERE date = ?', (today,), fetch_all=True)
+        # Added date column to selection: id, date, meal_type, calories, note
+        return self._execute('SELECT id, date, meal_type, calories, note FROM records WHERE date = ?', (today,), fetch_all=True)
 
     def get_today_breakdown(self):
         today = datetime.now().strftime('%Y-%m-%d')
@@ -126,7 +124,7 @@ class ChartGenerator:
 
     @staticmethod
     def create_daily(data):
-        fig, ax = plt.subplots(figsize=(5, 3))
+        fig, ax = plt.subplots(figsize=(5, 2))
         fig.patch.set_alpha(0); ax.patch.set_alpha(0)
         
         labels, values = ['早', '午', '晚', '消夜'], [data['breakfast'], data['lunch'], data['dinner'], data['snack']]
@@ -134,14 +132,19 @@ class ChartGenerator:
         
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.spines['left'].set_color('#D3D3D3'); ax.spines['bottom'].set_color('#D3D3D3')
+        
+        # Increase Axis Label Size
+        ax.tick_params(axis='x', labelsize=11) 
+        ax.tick_params(axis='y', labelsize=10)
+
         for i, v in enumerate(values):
-            if v > 0: ax.text(i, v+10, str(int(v)), ha='center', va='bottom', fontsize=9, fontweight='bold')
+            if v > 0: ax.text(i, v+10, str(int(v)), ha='center', va='bottom', fontsize=12, fontweight='bold')
         plt.tight_layout()
         return ChartGenerator._render(fig)
 
     @staticmethod
     def create_weekly(data):
-        fig, ax = plt.subplots(figsize=(5, 3))
+        fig, ax = plt.subplots(figsize=(5, 2))
         fig.patch.set_alpha(0); ax.patch.set_alpha(0)
         
         labels, values = [d['label'] for d in data], [d['total'] for d in data]
@@ -151,8 +154,12 @@ class ChartGenerator:
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False); ax.spines['bottom'].set_color('#D3D3D3')
         ax.yaxis.set_visible(False)
+        
+        # Increase Axis Label Size
+        ax.tick_params(axis='x', labelsize=11)
+
         for i, v in enumerate(values):
-            ax.text(i, v+50, str(v), ha='center', fontsize=9, fontweight='bold')
+            ax.text(i, v+50, str(v), ha='center', fontsize=12, fontweight='bold')
         plt.tight_layout()
         return ChartGenerator._render(fig)
 
@@ -166,69 +173,49 @@ class MainInterface(MDFloatLayout):
 
     def _build_ui(self):
         app = MDApp.get_running_app()
-        d = LANG_DICT[app.current_lang] if hasattr(app, "current_lang") else LANG_DICT["zh"]
-
-        # 1. Top Bar
+        d = LANG_DICT.get(app.current_lang, LANG_DICT["zh"])
+        
+        # Toolbar
         self.toolbar = MDTopAppBar(
-            title=d.get("calories", "卡路里"),
+            title=d.get("calories", "Calories"),
             elevation=0,
+            pos_hint={'top': 1},
             left_action_items=[["cog", lambda x: app.open_settings()]],
-            right_action_items=[["message-text-outline", lambda x: app.switch_to_chat()]]
+            right_action_items=[["message-text-outline", lambda x: app.switch_to_chat()]],
+            md_bg_color=COLOR_BG_CREAM,
+            specific_text_color=COLOR_ACCENT_SAGE
         )
-        
-        # Main layout container to hold toolbar and content
-        self.main_layout = MDBoxLayout(orientation='vertical')
-        self.main_layout.add_widget(self.toolbar)
+        self.add_widget(self.toolbar)
 
-        # Content area
-        content_box = MDFloatLayout()
-        
-        self.lbl_cal = MDLabel(text="0", halign="center", pos_hint={'center_x': 0.5, 'center_y': 0.84}, 
+        self.lbl_cal = MDLabel(text="0", halign="center", pos_hint={'center_x': 0.5, 'center_y': 0.82}, 
                                theme_text_color="Custom", text_color=(0.55, 0.45, 0.35, 1), font_style="H3", bold=True)
-        content_box.add_widget(self.lbl_cal)
+        self.add_widget(self.lbl_cal)
         
-        self.lbl_today = MDLabel(text="今日熱量 (kcal)", halign="center", pos_hint={'center_x': 0.5, 'center_y': 0.90},
+        self.lbl_today = MDLabel(text="今日熱量 (kcal)", halign="center", pos_hint={'center_x': 0.5, 'center_y': 0.89},
                                 theme_text_color="Custom", text_color=(0.5, 0.5, 0.5, 1), font_style="Subtitle2")
-        content_box.add_widget(self.lbl_today)
+        self.add_widget(self.lbl_today)
 
-        # 2. Key Content (Cards)
-        box = MDBoxLayout(orientation='vertical', size_hint=(0.9, 0.45), pos_hint={'center_x': 0.5, 'y': 0.15}, spacing=dp(12))
+        # 2. Key Content (Cards) - Increased Height
+        box = MDBoxLayout(orientation='vertical', size_hint=(0.9, 0.60), pos_hint={'center_x': 0.5, 'y': 0.14}, spacing=dp(12))
         
-        self.img_daily = Image(allow_stretch=True, keep_ratio=False)
+        self.img_daily = Image(allow_stretch=True, keep_ratio=True)
         self.card_daily = self._create_card("今日熱量", self.img_daily)
         box.add_widget(self.card_daily)
         
-        self.img_weekly = Image(allow_stretch=True, keep_ratio=False)
+        self.img_weekly = Image(allow_stretch=True, keep_ratio=True)
         self.card_weekly = self._create_card("本週趨勢", self.img_weekly)
         box.add_widget(self.card_weekly)
         
-        content_box.add_widget(box)
+        self.add_widget(box)
 
-        # Buttons (History) - Moved to FAB area or separate button
-        # Removing old cog/history buttons as cog is now in toolbar
-        # Adding History as a secondary FAB or simple button
-        self.hist_btn = MDIconButton(
-            icon="history", 
-            pos_hint={'right': 0.95, 'top': 0.98},
-            theme_text_color="Custom", 
-            text_color=COLOR_ACCENT_SAGE, 
-            on_release=self.show_history
-        )
-        content_box.add_widget(self.hist_btn)
+        # 3. FABs (Add & History)
+        # History/Delete - Bottom Left
+        self.add_widget(MDFloatingActionButton(icon="history", pos_hint={'x': 0.1, 'y': 0.03}, elevation=0,
+                                               md_bg_color=COLOR_ACCENT_SAGE, icon_color=(1,1,1,1), on_release=self.show_history))
 
-        self.main_layout.add_widget(content_box)
-        self.add_widget(self.main_layout)
-
-        # 3. FAB (Add)
-        self.fab = MDFloatingActionButton(
-            icon="plus", 
-            pos_hint={'right': 0.9, 'y': 0.03}, 
-            elevation=0, 
-            md_bg_color=COLOR_ACCENT_SAGE, 
-            icon_color=(1,1,1,1), 
-            on_release=self.show_add
-        )
-        self.add_widget(self.fab)
+        # Add - Bottom Right
+        self.add_widget(MDFloatingActionButton(icon="plus", pos_hint={'right': 0.9, 'y': 0.03}, elevation=0, 
+                                               md_bg_color=COLOR_ACCENT_SAGE, icon_color=(1,1,1,1), on_release=self.show_add))
 
     def update_theme_colors(self, *args):
         app = MDApp.get_running_app()
@@ -290,6 +277,7 @@ class MainInterface(MDFloatLayout):
         # Update Cards
         if hasattr(self, 'card_daily'): self.card_daily.label.text = d.get("cal_today", "今日熱量")
         if hasattr(self, 'card_weekly'): self.card_weekly.label.text = d.get("cal_weekly", "本週趨勢")
+        if hasattr(self, 'toolbar'): self.toolbar.title = d.get("calories", "Calories")
 
     # Dialogs
     def show_add(self, _):
@@ -310,7 +298,9 @@ class MainInterface(MDFloatLayout):
         cal = self._call_ai(food)
         if cal is None:
             self.dialog.dismiss()
-            self.show_settings(None)
+            # Show error snackbar instead of settings
+            from kivymd.uix.snackbar import Snackbar
+            Snackbar(text="無法估算熱量，請稍後再試", font_name=FONT_MAIN).open()
             return
 
         self.db.add_record(content.meal, cal, f"AI: {food}")
@@ -318,44 +308,48 @@ class MainInterface(MDFloatLayout):
         self.refresh_ui()
 
     def _call_ai(self, food):
-        cal = ai_manager.get_calorie_estimation(food)
-        if cal is not None:
-            return cal
-        else:
-            # Fallback to random if server fails
-            return random.randint(200, 900)
+        return ai_manager.estimate_calories(food)
 
-    def show_settings(self, _):
-        app = MDApp.get_running_app()
-        lang = app.current_lang if hasattr(app, "current_lang") else "zh"
-        d = LANG_DICT.get(lang, LANG_DICT["zh"])
-        
-        content = SettingsContent(self.db.get_api_key())
-        self.dialog = MDDialog(title=d.get("settings", "設定"), type="custom", content_cls=content,
-                               buttons=[MDFlatButton(text=d.get("cancel", "取消"), on_release=lambda x: self.dialog.dismiss(), theme_text_color="Custom", text_color=COLOR_TEXT_DARK_GREY),
-                                        MDRaisedButton(text=d.get("save", "儲存"), md_bg_color=COLOR_ACCENT_SAGE, on_release=lambda x: self._save_settings(content))])
-        self.dialog.open()
-
-    def _save_settings(self, content):
-        self.db.save_api_key(content.field.text.strip())
-        self.dialog.dismiss()
 
     def show_history(self, _):
         app = MDApp.get_running_app()
         lang = app.current_lang if hasattr(app, "current_lang") else "zh"
         d = LANG_DICT.get(lang, LANG_DICT["zh"])
         
+        # Fetch records (now includes date at index 1: id, date, meal_type, calories, note)
         records = self.db.get_today_records()
         content = MDBoxLayout(orientation="vertical", size_hint_y=None, height=dp(300))
         scroll = MDScrollView()
         lst = MDList()
-        if not records: lst.add_widget(OneLineAvatarIconListItem(text=d.get("cal_no_record", "今日尚無紀錄")))
+        
+        if not records: 
+            lst.add_widget(OneLineAvatarIconListItem(text=d.get("cal_no_record", "今日尚無紀錄")))
+        
         for r in records:
-            item = OneLineAvatarIconListItem(text=f"{r[1].upper()}: {r[2]} ({r[3]})", theme_text_color="Custom", text_color=COLOR_TEXT_DARK_GREY)
+            # Map meal type to localized string
+            meal_key = f"cal_{r[2]}"
+            meal_name = d.get(meal_key, r[2].upper()) # Fallback to upper case if not found
+            
+            # Format: 
+            # Main: Breakfast: 550
+            # Sub: 2026-02-08 | AI: Sandwich
+            item = TwoLineAvatarIconListItem(
+                text=f"{meal_name}: {r[3]} kcal",
+                secondary_text=f"{r[1]} | {r[4]}",
+                theme_text_color="Custom", 
+                text_color=COLOR_TEXT_DARK_GREY,
+                secondary_theme_text_color="Custom",
+                secondary_text_color=(0.6, 0.6, 0.6, 1)
+            )
+            
             icon = IconRightWidget(icon="trash-can-outline", theme_text_color="Custom", text_color=(1,0.3,0.3,1), 
                                    on_release=lambda x, rid=r[0]: self._del_record(rid))
-            item.add_widget(icon); lst.add_widget(item)
-        scroll.add_widget(lst); content.add_widget(scroll)
+            item.add_widget(icon)
+            lst.add_widget(item)
+            
+        scroll.add_widget(lst)
+        content.add_widget(scroll)
+        
         self.dialog = MDDialog(title=d.get("cal_history", "今日紀錄"), type="custom", content_cls=content,
                                buttons=[MDFlatButton(text=d.get("close", "關閉"), on_release=lambda x: self.dialog.dismiss())])
         self.dialog.open()
@@ -401,17 +395,6 @@ class AddFoodContent(MDBoxLayout):
                 b.md_bg_color = (0.9, 0.9, 0.9, 1)
                 b.text_color = COLOR_TEXT_DARK_GREY
 
-class SettingsContent(MDBoxLayout):
-    def __init__(self, key, **kwargs):
-        super().__init__(orientation="vertical", spacing="12dp", size_hint_y=None, height="120dp", **kwargs)
-        self.field = MDTextField(text=key or "", hint_text="API Key", font_name=FONT_MAIN)
-        
-        app = MDApp.get_running_app()
-        lang = app.current_lang if hasattr(app, "current_lang") else "zh"
-        d = LANG_DICT.get(lang, LANG_DICT["zh"])
-        
-        self.add_widget(MDLabel(text=d.get("api_key", "Gemini API Key"), theme_text_color="Primary"))
-        self.add_widget(self.field)
 
 class CalorieApp(MDApp):
     def build(self):

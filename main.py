@@ -182,41 +182,6 @@ class MainApp(MDApp):
         self.screen_manager.transition = MDFadeSlideTransition(duration=0.5)
         self.screen_manager.current = "login"
     
-    def show_ai_settings(self, *args):
-        self.settings_dialog.dismiss()
-        d = LANG_DICT[self.current_lang]
-        
-        current_key = database.get_setting("gemini_api_key") or ""
-        self.api_key_field = MDTextField(
-            text=current_key,
-            hint_text=d["api_key"],
-            helper_text=d["enter_key"],
-            helper_text_mode="on_focus"
-        )
-        
-        self.ai_dialog = MDDialog(
-            title=d["ai_settings"],
-            type="custom",
-            content_cls=MDBoxLayout(
-                self.api_key_field,
-                orientation="vertical",
-                size_hint_y=None,
-                height=dp(80)
-            ),
-            buttons=[
-                MDFillRoundFlatButton(text=d["cancel"], on_release=lambda x: self.ai_dialog.dismiss()),
-                MDFillRoundFlatButton(text=d["save"], on_release=self.save_api_key),
-            ],
-        )
-        self.ai_dialog.open()
-
-    def save_api_key(self, *args):
-        new_key = self.api_key_field.text.strip()
-        database.set_setting("gemini_api_key", new_key)
-        self.ai_dialog.dismiss()
-        from kivymd.uix.snackbar import Snackbar
-        d = LANG_DICT[self.current_lang]
-        Snackbar(text=d["key_saved"]).open()
 
     def show_lang_options(self, *args):
         self.settings_dialog.dismiss()
