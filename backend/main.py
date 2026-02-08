@@ -40,6 +40,9 @@ class RecommendRequest(BaseModel):
     family_data: str
     inventory_data: str
 
+class CalorieRequest(BaseModel):
+    food_name: str
+
 @app.get("/")
 async def root():
     return {"message": "Home Assistant AI Backend is running"}
@@ -159,6 +162,29 @@ async def vision_recognition(file: UploadFile = File(...)):
     except Exception as e:
         print(f"[ERROR] Vision AI Exception: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Vision AI Error: {str(e)}")
+
+@app.post("/estimate_calories")
+async def estimate_calories(request: CalorieRequest):
+    api_key = configure_genai()
+    if not api_key:
+        print("[ERROR] GEMINI_API_KEY IS MISSING IN ENVIRONMENT.")
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server")
+    
+    print(f"[INFO] New calorie estimation request: {request.food_name}")
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    
+    prompt = f"Estimate the calorie count for: '{request.food_name}'. Return ONLY the integer value (kcal)."
+    
+    try:
+        response = await model.generate_content_async(prompt)
+        # Extract only digits
+        cal_str = ''.join(filter(str.isdigit, response.text))
+        calories = int(cal_str) if cal_str else 0
+        print(f"[INFO] Calorie estimation successful: {calories} kcal")
+        return {"calories": calories}
+    except Exception as e:
+        print(f"[ERROR] Calorie Estimation Exception: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

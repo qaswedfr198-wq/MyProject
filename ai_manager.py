@@ -57,3 +57,19 @@ def recognize_food_from_image(image_path):
     except Exception as e:
         print(f"Vision AI 連線錯誤: {e}")
         return None
+
+def get_calorie_estimation(food_name):
+    """
+    從雲端後端取得食物熱量估算
+    """
+    url = f"{BACKEND_URL}/estimate_calories"
+    payload = {"food_name": food_name}
+    
+    try:
+        response = requests.post(url, json=payload, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("calories", 0)
+    except Exception as e:
+        print(f"熱量估算連線錯誤: {e}")
+        return None

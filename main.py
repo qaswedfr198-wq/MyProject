@@ -11,6 +11,7 @@ from kivy.core.text import LabelBase
 from kivy.metrics import dp
 
 import database
+import calories
 import ui.screens
 import ui.login
 from ui.localization import LANG_DICT
@@ -73,8 +74,22 @@ class MainApp(MDApp):
         )
         self.inventory_view = ui.screens.InventoryScreen()
         self.screen_inv.add_widget(self.inventory_view)
+
+        # Screen 3: Calories
+        self.screen_cal = MDBottomNavigationItem(
+            name="screen_cal",
+            text=LANG_DICT[self.current_lang]["calories"],
+            icon="fire",
+        )
+        self.calories_db = calories.DatabaseManager()
+        # Initialize dummy data if empty
+        if self.calories_db.get_today_total() == 0:
+             self.calories_db.add_record('breakfast', 400) # dummy
+
+        self.calories_view = calories.MainInterface(self.calories_db)
+        self.screen_cal.add_widget(self.calories_view)
         
-        # Screen 3: AI Chat
+        # Screen 4: AI Chat
         self.screen_ai = MDBottomNavigationItem(
             name="screen_ai",
             text=LANG_DICT[self.current_lang]["chat"],
@@ -86,6 +101,7 @@ class MainApp(MDApp):
         
         self.nav.add_widget(self.screen_family)
         self.nav.add_widget(self.screen_inv)
+        self.nav.add_widget(self.screen_cal)
         self.nav.add_widget(self.screen_ai)
         
         # Wrap nav in MainScreen
@@ -258,6 +274,11 @@ class MainApp(MDApp):
         
         # AI Chat View
         self.ai_layout.update_theme_colors()
+
+        # Calories View
+        if hasattr(self, 'calories_view'):
+            self.calories_view.update_theme_colors()
+            self.calories_view.refresh_ui()
         
         # Update existing dialogs instead of just setting to None
         if hasattr(self.family_view, 'dialog') and self.family_view.dialog:
@@ -275,6 +296,7 @@ class MainApp(MDApp):
         # Update Navigation Tabs
         self.screen_family.text = d["family"]
         self.screen_inv.text = d["inventory"]
+        self.screen_cal.text = d["calories"]
         self.screen_ai.text = d["chat"]
         
         # Update Toolbars
@@ -288,6 +310,9 @@ class MainApp(MDApp):
         # Refresh Screen Contents (Empty labels etc.)
         self.family_view.load_data()
         self.inventory_view.load_data()
+        if hasattr(self, 'calories_view'):
+            self.calories_view.toolbar.title = d["calories"]
+            self.calories_view.refresh_ui()
         
         # Re-initialize dialogs on next open to use new language
         self.family_view.dialog = None

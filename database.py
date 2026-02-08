@@ -93,3 +93,11 @@ def get_setting(key):
 
 def set_setting(key, value):
     get_backend().set_setting(current_user_id, key, value)
+
+def get_local_setting(key):
+    # Always access local DB for device-specific settings like "Remember Me"
+    return LocalBackend().get_setting(None, key)
+
+def save_local_setting(key, value):
+    # Always save to local DB
+    LocalBackend().set_setting(None, key, value)
