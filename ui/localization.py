@@ -87,7 +87,14 @@ LANG_DICT = {
         "cal_snack": "消夜",
         "cal_no_record": "今日尚無紀錄",
         "cal_estimate": "預估熱量",
-        "cal_saved": "已儲存"
+        "cal_saved": "已儲存",
+        "sugg_recipe": "推薦食譜",
+        "sugg_exercise": "運動飲食",
+        "sugg_shopping": "採購清單",
+        "msg_recipe": "能幫我推薦一些基於目前庫存的健康食譜嗎？（避開過敏原）",
+        "msg_exercise": "我今天要運動，適合吃什麼來補充能量？",
+        "msg_shopping": "我要去採購，根據家庭需求我買什麼合適？",
+        "health_warning": "【健康警示】"
     },
     "en": {
         "family": "Profile",
@@ -176,6 +183,13 @@ LANG_DICT = {
         "cal_snack": "Snack",
         "cal_no_record": "No records today",
         "cal_estimate": "Estimated Calories",
-        "cal_saved": "Saved"
+        "cal_saved": "Saved",
+        "sugg_recipe": "Recipes",
+        "sugg_exercise": "Exercise",
+        "sugg_shopping": "Shopping",
+        "msg_recipe": "Can you suggest some healthy recipes based on current inventory? (Avoid allergens)",
+        "msg_exercise": "I'm going to exercise today, what should I eat for energy?",
+        "msg_shopping": "I'm going shopping, what should I buy for my family?",
+        "health_warning": "[Health Warning]"
     }
 }

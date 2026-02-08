@@ -44,6 +44,14 @@ class LocalBackend:
                 value TEXT
             )
         ''')
+
+        # Quick Replies Table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS quick_replies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT NOT NULL
+            )
+        ''')
         
         # Migrations
         try:
@@ -178,5 +186,28 @@ class LocalBackend:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+        conn.commit()
+        conn.close()
+
+    # --- Quick Replies Operations ---
+    def add_quick_reply(self, content):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO quick_replies (content) VALUES (?)", (content,))
+        conn.commit()
+        conn.close()
+
+    def get_quick_replies(self):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM quick_replies")
+        replies = cursor.fetchall()
+        conn.close()
+        return replies
+
+    def delete_quick_reply(self, reply_id):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM quick_replies WHERE id = ?", (reply_id,))
         conn.commit()
         conn.close()

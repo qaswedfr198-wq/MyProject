@@ -639,6 +639,19 @@ class InventoryScreen(MDScreen):
         except ValueError:
             print("Invalid Input")
 
+class SuggestionChip(MDFillRoundFlatButton):
+    def __init__(self, text, message, is_custom=False, reply_id=None, **kwargs):
+        super().__init__(**kwargs)
+        self.text = text
+        self.message = message
+        self.is_custom = is_custom
+        self.reply_id = reply_id
+        self.font_name = 'chinese_font'
+        self.md_bg_color = [0.95, 0.95, 0.95, 1]
+        self.text_color = [0.4, 0.4, 0.4, 1]
+        self.elevation = 0
+        self.padding = [dp(10), dp(5)]
+
 class AIChatScreen(MDBoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -651,6 +664,12 @@ class AIChatScreen(MDBoxLayout):
         self.chat_scroll = MDScrollView()
         self.chat_list = MDList()
         self.chat_scroll.add_widget(self.chat_list)
+        
+        # Suggestion Chips Row
+        self.suggestion_scroll = MDScrollView(size_hint_y=None, height=dp(50), do_scroll_x=True, do_scroll_y=False)
+        self.suggestion_list = MDBoxLayout(orientation='horizontal', spacing=dp(8), padding=[dp(10), 0, dp(10), 0], size_hint_x=None)
+        self.suggestion_list.bind(minimum_width=self.suggestion_list.setter('width'))
+        self.suggestion_scroll.add_widget(self.suggestion_list)
         
         # Input Area
         input_box = MDBoxLayout(orientation='horizontal', size_hint_y=None, height=dp(60), padding=dp(5), spacing=dp(5))
@@ -668,8 +687,71 @@ class AIChatScreen(MDBoxLayout):
         )
         self.add_widget(self.ai_toolbar)
         self.add_widget(self.chat_scroll)
+        self.add_widget(self.suggestion_scroll)
         self.add_widget(input_box)
+        
+        self.load_suggestions()
         self.update_theme_colors()
+
+    def load_suggestions(self):
+        self.suggestion_list.clear_widgets()
+        app = MDApp.get_running_app()
+        d = LANG_DICT[app.current_lang]
+        
+        # 1. Preset Suggestions
+        presets = [
+            (d["sugg_recipe"], d["msg_recipe"]),
+            (d["sugg_exercise"], d["msg_exercise"]),
+            (d["sugg_shopping"], d["msg_shopping"]),
+        ]
+        
+        for label, msg in presets:
+            btn = SuggestionChip(text=label, message=msg)
+            btn.bind(on_release=lambda x, m=msg: self.send_suggestion(m))
+            self.suggestion_list.add_widget(btn)
+            
+        # 2. Custom Suggestions from DB
+        import database
+        customs = database.get_quick_replies()
+        for r_id, content in customs:
+            label = (content[:8] + '..') if len(content) > 8 else content
+            btn = SuggestionChip(text=label, message=content, is_custom=True, reply_id=r_id)
+            btn.md_bg_color = [0.9, 0.95, 0.9, 1]
+            btn.bind(on_release=lambda x, m=content: self.send_suggestion(m))
+            self.suggestion_list.add_widget(btn)
+                
+        # 3. Add Custom Button
+        add_btn = MDIconButton(icon="plus-circle-outline", theme_text_color="Custom", text_color=[0.5, 0.5, 0.5, 1])
+        add_btn.bind(on_release=self.show_add_suggestion_dialog)
+        self.suggestion_list.add_widget(add_btn)
+
+    def send_suggestion(self, message):
+        self.chat_input.text = message
+        self.send_ai_message(None)
+
+    def show_add_suggestion_dialog(self, *args):
+        app = MDApp.get_running_app()
+        d = LANG_DICT[app.current_lang]
+        self.custom_input = MDTextField(hint_text=d["ask_ai"], mode="fill", font_name='chinese_font')
+        
+        self.add_dialog = MDDialog(
+            title="新增快捷訊息",
+            type="custom",
+            content_cls=MDBoxLayout(self.custom_input, orientation="vertical", size_hint_y=None, height=dp(60)),
+            buttons=[
+                MDFlatButton(text=d["cancel"], on_release=lambda x: self.add_dialog.dismiss()),
+                MDFlatButton(text=d["save"], on_release=self.save_custom_suggestion),
+            ],
+        )
+        self.add_dialog.open()
+
+    def save_custom_suggestion(self, *args):
+        content = self.custom_input.text.strip()
+        if content:
+            import database
+            database.add_quick_reply(content)
+            self.load_suggestions()
+        self.add_dialog.dismiss()
 
     def update_theme_colors(self, *args):
         app = MDApp.get_running_app()

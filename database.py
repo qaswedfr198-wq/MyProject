@@ -101,3 +101,14 @@ def get_local_setting(key):
 def save_local_setting(key, value):
     # Always save to local DB
     LocalBackend().set_setting(None, key, value)
+
+# --- Quick Replies Operations ---
+def add_quick_reply(content):
+    # Only support local quick replies for now
+    LocalBackend().add_quick_reply(content)
+
+def get_quick_replies():
+    return LocalBackend().get_quick_replies()
+
+def delete_quick_reply(reply_id):
+    LocalBackend().delete_quick_reply(reply_id)
