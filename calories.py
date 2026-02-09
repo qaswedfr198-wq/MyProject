@@ -2,6 +2,7 @@ import sqlite3
 import random
 from datetime import datetime, timedelta
 from io import BytesIO
+from kivymd.uix.pickers import MDDatePicker
 
 # Kivy Configuration (Must be before other Kivy imports)
 from kivy.config import Config
@@ -75,37 +76,52 @@ class DatabaseManager:
     def get_api_key(self):
         return None # No longer used
 
-    def add_record(self, meal, cal, note=""):
-        today = datetime.now().strftime('%Y-%m-%d')
-        self._execute('INSERT INTO records (date, meal_type, calories, note) VALUES (?, ?, ?, ?)', (today, meal, cal, note))
+    def add_record(self, meal, cal, note="", date_str=None):
+        if not date_str:
+            date_str = datetime.now().strftime('%Y-%m-%d')
+        self._execute('INSERT INTO records (date, meal_type, calories, note) VALUES (?, ?, ?, ?)', (date_str, meal, cal, note))
 
     def delete_record(self, rid):
         self._execute('DELETE FROM records WHERE id = ?', (rid,))
 
-    def get_today_total(self):
-        today = datetime.now().strftime('%Y-%m-%d')
-        res = self._execute('SELECT SUM(calories) FROM records WHERE date = ?', (today,), fetch_one=True)
+    def get_day_total(self, date_str=None):
+        target_date = date_str if date_str else datetime.now().strftime('%Y-%m-%d')
+        res = self._execute('SELECT SUM(calories) FROM records WHERE date = ?', (target_date,), fetch_one=True)
         return res[0] if res[0] else 0
 
-    def get_today_records(self):
-        today = datetime.now().strftime('%Y-%m-%d')
-        # Added date column to selection: id, date, meal_type, calories, note
-        return self._execute('SELECT id, date, meal_type, calories, note FROM records WHERE date = ?', (today,), fetch_all=True)
+    # Old method alias for compatibility if needed, but we should update calls
+    def get_today_total(self):
+         return self.get_day_total()
 
-    def get_today_breakdown(self):
-        today = datetime.now().strftime('%Y-%m-%d')
-        rows = self._execute('SELECT meal_type, SUM(calories) FROM records WHERE date = ? GROUP BY meal_type', (today,), fetch_all=True)
+    def get_day_records(self, date_str=None):
+        target_date = date_str if date_str else datetime.now().strftime('%Y-%m-%d')
+        # Added date column to selection: id, date, meal_type, calories, note
+        return self._execute('SELECT id, date, meal_type, calories, note FROM records WHERE date = ?', (target_date,), fetch_all=True)
+
+    def get_today_records(self):
+        return self.get_day_records()
+
+    def get_day_breakdown(self, date_str=None):
+        target_date = date_str if date_str else datetime.now().strftime('%Y-%m-%d')
+        rows = self._execute('SELECT meal_type, SUM(calories) FROM records WHERE date = ? GROUP BY meal_type', (target_date,), fetch_all=True)
         data = {'breakfast': 0, 'lunch': 0, 'dinner': 0, 'snack': 0}
         for m, c in rows:
             data[m] if m in data else data.update({'snack': data['snack'] + c})
             if m in data: data[m] = c
         return data
 
-    def get_weekly_data(self):
+    def get_today_breakdown(self):
+        return self.get_day_breakdown()
+
+    def get_weekly_data(self, end_date_str=None):
         data = []
-        today = datetime.now()
+        if end_date_str:
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+        else:
+            end_date = datetime.now()
+            
         for i in range(6, -1, -1):
-            date = (today - timedelta(days=i)).strftime('%Y-%m-%d')
+            date = (end_date - timedelta(days=i)).strftime('%Y-%m-%d')
             res = self._execute('SELECT SUM(calories) FROM records WHERE date = ?', (date,), fetch_one=True)
             label = ["週一","週二","週三","週四","週五","週六","週日"][datetime.strptime(date, '%Y-%m-%d').weekday()]
             data.append({"label": label, "total": res[0] if res[0] else 0})
@@ -168,6 +184,7 @@ class MainInterface(MDFloatLayout):
         super().__init__(**kwargs)
         self.db = db
         self.md_bg_color = COLOR_BG_CREAM
+        self.selected_date = datetime.now().strftime('%Y-%m-%d') # Default to today
         self._build_ui()
         self.refresh_ui()
 
@@ -176,11 +193,12 @@ class MainInterface(MDFloatLayout):
         d = LANG_DICT.get(app.current_lang, LANG_DICT["zh"])
         
         # Toolbar
+        # Toolbar
         self.toolbar = MDTopAppBar(
-            title=d.get("calories", "Calories"),
+            title=self.selected_date,  # Initial title
             elevation=0,
             pos_hint={'top': 1},
-            left_action_items=[["cog", lambda x: app.open_settings()]],
+            left_action_items=[["calendar", lambda x: self.show_date_picker()]], # Change cog to calendar for testing or add separately
             right_action_items=[["message-text-outline", lambda x: app.switch_to_chat()]],
             md_bg_color=COLOR_BG_CREAM,
             specific_text_color=COLOR_ACCENT_SAGE
@@ -251,6 +269,20 @@ class MainInterface(MDFloatLayout):
         if hasattr(self, 'hist_btn'):
             self.hist_btn.text_color = COLOR_ACCENT_SAGE
 
+    def show_date_picker(self):
+        try:
+            date_obj = datetime.strptime(self.selected_date, '%Y-%m-%d')
+        except ValueError:
+            date_obj = datetime.now()
+            
+        date_dialog = MDDatePicker(year=date_obj.year, month=date_obj.month, day=date_obj.day)
+        date_dialog.bind(on_save=self.on_date_save)
+        date_dialog.open()
+
+    def on_date_save(self, instance, value, date_range):
+        self.selected_date = value.strftime('%Y-%m-%d')
+        self.refresh_ui()
+
     def _create_card(self, title, content_widget):
         card = MDCard(radius=[20], elevation=1, md_bg_color=(1, 1, 1, 1), orientation='vertical', padding=dp(10))
         label = MDLabel(text=title, size_hint_y=None, height=dp(20), font_style="Subtitle2", theme_text_color="Custom", text_color=COLOR_TEXT_DARK_GREY)
@@ -266,18 +298,22 @@ class MainInterface(MDFloatLayout):
         app = MDApp.get_running_app()
         d = LANG_DICT[app.current_lang] if hasattr(app, "current_lang") else LANG_DICT["zh"]
         
-        self.lbl_today.text = d.get("cal_today", "今日熱量 (kcal)")
+        # Simplify title to just date
+        self.toolbar.title = self.selected_date
+
+        # Simplify label to just "Total (kcal)" or similar
+        self.lbl_today.text = "總熱量 (kcal)"
         
-        total = self.db.get_today_total()
+        total = self.db.get_day_total(self.selected_date)
         self.lbl_cal.text = str(total)
 
-        self.img_daily.texture = ChartGenerator.create_daily(self.db.get_today_breakdown())
-        self.img_weekly.texture = ChartGenerator.create_weekly(self.db.get_weekly_data())
+        self.img_daily.texture = ChartGenerator.create_daily(self.db.get_day_breakdown(self.selected_date))
+        self.img_weekly.texture = ChartGenerator.create_weekly(self.db.get_weekly_data(self.selected_date))
         
-        # Update Cards
-        if hasattr(self, 'card_daily'): self.card_daily.label.text = d.get("cal_today", "今日熱量")
+        # Update Cards - Keep date there for clarity or simplify too? 
+        # User said "top text", so maybe cards are fine. But let's simplify daily to just "當日熱量"
+        if hasattr(self, 'card_daily'): self.card_daily.label.text = "當日熱量"
         if hasattr(self, 'card_weekly'): self.card_weekly.label.text = d.get("cal_weekly", "本週趨勢")
-        if hasattr(self, 'toolbar'): self.toolbar.title = d.get("calories", "Calories")
 
     # Dialogs
     def show_add(self, _):
@@ -303,7 +339,7 @@ class MainInterface(MDFloatLayout):
             Snackbar(text="無法估算熱量，請稍後再試", font_name=FONT_MAIN).open()
             return
 
-        self.db.add_record(content.meal, cal, f"AI: {food}")
+        self.db.add_record(content.meal, cal, f"AI: {food}", date_str=self.selected_date)
         self.dialog.dismiss()
         self.refresh_ui()
 
@@ -317,7 +353,7 @@ class MainInterface(MDFloatLayout):
         d = LANG_DICT.get(lang, LANG_DICT["zh"])
         
         # Fetch records (now includes date at index 1: id, date, meal_type, calories, note)
-        records = self.db.get_today_records()
+        records = self.db.get_day_records(self.selected_date)
         content = MDBoxLayout(orientation="vertical", size_hint_y=None, height=dp(300))
         scroll = MDScrollView()
         lst = MDList()
@@ -350,7 +386,7 @@ class MainInterface(MDFloatLayout):
         scroll.add_widget(lst)
         content.add_widget(scroll)
         
-        self.dialog = MDDialog(title=d.get("cal_history", "今日紀錄"), type="custom", content_cls=content,
+        self.dialog = MDDialog(title=f"{self.selected_date} 紀錄", type="custom", content_cls=content,
                                buttons=[MDFlatButton(text=d.get("close", "關閉"), on_release=lambda x: self.dialog.dismiss())])
         self.dialog.open()
 
@@ -402,7 +438,7 @@ class CalorieApp(MDApp):
         self.theme_cls.primary_palette = "Teal"
         self._configure_fonts()
         self.db = DatabaseManager()
-        if self.db.get_today_total() == 0: self.db.add_record('breakfast', 400) # dummy
+        if self.db.get_day_total() == 0: self.db.add_record('breakfast', 400) # dummy
         return MainInterface(self.db)
 
     def _configure_fonts(self):

@@ -5,7 +5,7 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.button import MDFillRoundFlatButton, MDIconButton, MDFloatingActionButton, MDRectangleFlatButton, MDRaisedButton, MDFillRoundFlatIconButton, MDFlatButton
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.textfield import MDTextField
-from kivymd.uix.list import MDList, TwoLineAvatarIconListItem, IconLeftWidget, IconRightWidget
+from kivymd.uix.list import MDList, TwoLineAvatarIconListItem, IconLeftWidget, IconRightWidget, OneLineListItem
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.toolbar import MDTopAppBar
 from kivymd.uix.card import MDCard
@@ -202,6 +202,18 @@ class FamilyScreen(MDScreen):
 class InventoryScreen(MDScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        
+        # Background Image (added before other layouts to be at the bottom)
+        from kivy.uix.image import Image
+        bg_image = Image(
+            source="TATA/去背/09.png", 
+            opacity=0.3,
+            size_hint=(0.95, 0.95),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5},
+            allow_stretch=True
+        )
+        self.add_widget(bg_image)
+        
         self.layout = MDBoxLayout(orientation='vertical', spacing=dp(10))
         
         # Category Filter Bar
@@ -315,8 +327,8 @@ class InventoryScreen(MDScreen):
         is_dark = MDApp.get_running_app().theme_cls.theme_style == "Dark"
         bg_color = [0.07, 0.07, 0.07, 1] if is_dark else COLOR_BG_CREAM
         self.md_bg_color = bg_color
-        if hasattr(self, 'main_float'):
-            self.main_float.md_bg_color = bg_color
+        # if hasattr(self, 'main_float'):
+        #     self.main_float.md_bg_color = bg_color
             
         # Refresh filter buttons to pick up new theme colors
         if hasattr(self, 'filter_layout') and self.filter_layout.children:
@@ -651,29 +663,151 @@ class SuggestionChip(MDFillRoundFlatButton):
         self.text_color = [0.4, 0.4, 0.4, 1]
         self.elevation = 0
         self.padding = [dp(10), dp(5)]
+        self.size_hint_x = None  # Allow width to be calculated from text
+        
+        self.long_press_duration = 1.0
+        self._long_press_event = None
 
-class AIChatScreen(MDBoxLayout):
+    def on_touch_down(self, touch):
+        if self.is_custom and self.collide_point(*touch.pos):
+            self._long_press_event = Clock.schedule_once(
+                lambda dt: self.on_long_press(), self.long_press_duration
+            )
+        return super().on_touch_down(touch)
+
+    def on_touch_up(self, touch):
+        if self._long_press_event:
+            Clock.unschedule(self._long_press_event)
+            self._long_press_event = None
+        return super().on_touch_up(touch)
+
+    def on_long_press(self):
+        app = MDApp.get_running_app()
+        # Access ai_layout directly from the app instance (set in main.py)
+        if hasattr(app, 'ai_layout'):
+            app.ai_layout.show_suggestion_mgmt_menu(self)
+        else:
+            # Fallback traversal
+            p = self.parent
+            while p and p.__class__.__name__ != 'AIChatScreen':
+                p = p.parent
+            if p:
+                p.show_suggestion_mgmt_menu(self)
+
+class ChatBubble(MDCard):
+    def __init__(self, text, sender="You", **kwargs):
+        super().__init__(**kwargs)
+        self.radius = [15, 15, 15, 15]
+        self.elevation = 0
+        self.padding = dp(10)
+        self.spacing = dp(5)
+        self.orientation = "vertical"
+        self.size_hint_y = None
+        self.height = dp(60) # Initial guess
+        # Allow width to fill but with margins
+        self.size_hint_x = 0.85 
+        
+        # Determine style based on sender
+        app = MDApp.get_running_app()
+        is_dark = app.theme_cls.theme_style == "Dark"
+        
+        if sender == "You":
+            self.md_bg_color = [0.9, 0.9, 0.9, 1] if not is_dark else [0.2, 0.2, 0.2, 1]
+            self.pos_hint = {'right': 0.98}
+            align = "right"
+            text_color = [0.1, 0.1, 0.1, 1] if not is_dark else [0.9, 0.9, 0.9, 1]
+            title_color = COLOR_ACCENT_SAGE
+        else:
+            self.md_bg_color = [1, 1, 1, 1] if not is_dark else [0.15, 0.15, 0.15, 1]
+            self.pos_hint = {'x': 0.02}
+            align = "left"
+            text_color = [0.2, 0.2, 0.2, 1] if not is_dark else [0.9, 0.9, 0.9, 1]
+            title_color = [0.5, 0.5, 0.5, 1]
+
+        # Title (Sender)
+        self.title = MDLabel(
+            text=sender, 
+            font_style="Caption", 
+            theme_text_color="Custom", 
+            text_color=title_color,
+            size_hint_y=None, 
+            height=dp(15),
+            halign=align
+        )
+        self.add_widget(self.title)
+        
+        # Content
+        self.label = MDLabel(
+            text=text,
+            theme_text_color="Custom",
+            text_color=text_color,
+            size_hint_y=None,
+            font_name='chinese_font',
+            markup=True
+        )
+        # 綁定 texture_size 以自動調整高度
+        self.label.bind(texture_size=self.update_height)
+        self.add_widget(self.label)
+        
+        # Trigger initial height calculation
+        Clock.schedule_once(lambda dt: self.update_height(), 0)
+
+    def update_height(self, *args):
+        self.label.height = self.label.texture_size[1]
+        self.height = self.label.height + self.title.height + dp(25) # Padding fix
+
+class AIChatScreen(MDScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._long_press_active_chips = set() # Track chips in long-press state
+        
         app = MDApp.get_running_app()
         d = LANG_DICT[app.current_lang]
         
-        self.orientation = 'vertical'
+        # Background Image
+        # Background Image
+        from kivy.uix.image import Image
+        bg_image = Image(
+            source="TATA/去背/10.png", 
+            opacity=0.3,
+            size_hint=(0.95, 0.95),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5},
+            allow_stretch=True
+        )
+        self.add_widget(bg_image)
+
+        # Content Layout (Foreground)
+        self.layout = MDBoxLayout(orientation='vertical')
         
         # Chat History
+        # Chat History container needs to be a BoxLayout inside ScrollView for variable height items
         self.chat_scroll = MDScrollView()
-        self.chat_list = MDList()
+        self.chat_list = MDBoxLayout(orientation='vertical', size_hint_y=None, padding=dp(10), spacing=dp(10))
+        self.chat_list.bind(minimum_height=self.chat_list.setter('height'))
         self.chat_scroll.add_widget(self.chat_list)
         
-        # Suggestion Chips Row
-        self.suggestion_scroll = MDScrollView(size_hint_y=None, height=dp(50), do_scroll_x=True, do_scroll_y=False)
-        self.suggestion_list = MDBoxLayout(orientation='horizontal', spacing=dp(8), padding=[dp(10), 0, dp(10), 0], size_hint_x=None)
-        self.suggestion_list.bind(minimum_width=self.suggestion_list.setter('width'))
-        self.suggestion_scroll.add_widget(self.suggestion_list)
+        # Suggestions Container (Two rows)
+        self.suggestions_container = MDBoxLayout(orientation='vertical', size_hint_y=None, height=dp(100), spacing=dp(2))
+        
+        # Row 1: Presets
+        self.preset_scroll = MDScrollView(size_hint_y=None, height=dp(48), do_scroll_x=True, do_scroll_y=False)
+        self.preset_list = MDBoxLayout(orientation='horizontal', spacing=dp(8), padding=[dp(10), 0, dp(10), 0], size_hint_x=None, adaptive_width=True)
+        self.preset_scroll.add_widget(self.preset_list)
+        
+        # Row 2: Custom
+        self.custom_scroll = MDScrollView(size_hint_y=None, height=dp(48), do_scroll_x=True, do_scroll_y=False)
+        self.custom_list = MDBoxLayout(orientation='horizontal', spacing=dp(8), padding=[dp(10), 0, dp(10), 0], size_hint_x=None, adaptive_width=True)
+        self.custom_scroll.add_widget(self.custom_list)
+        
+        self.suggestions_container.add_widget(self.preset_scroll)
+        self.suggestions_container.add_widget(self.custom_scroll)
         
         # Input Area
         input_box = MDBoxLayout(orientation='horizontal', size_hint_y=None, height=dp(60), padding=dp(5), spacing=dp(5))
         self.chat_input = MDTextField(hint_text=d["ask_ai"], mode="fill", font_name='chinese_font', font_name_hint_text='chinese_font')
+        # Make input field slightly transparent/white to be readable against background
+        self.chat_input.md_bg_color = [1, 1, 1, 0.8] 
+        
         send_btn = MDIconButton(icon="send", on_release=self.send_ai_message)
         
         input_box.add_widget(self.chat_input)
@@ -685,20 +819,26 @@ class AIChatScreen(MDBoxLayout):
             anchor_title="center",
             left_action_items=[["cog", lambda x: MDApp.get_running_app().open_settings()]]
         )
-        self.add_widget(self.ai_toolbar)
-        self.add_widget(self.chat_scroll)
-        self.add_widget(self.suggestion_scroll)
-        self.add_widget(input_box)
+        
+        # Add widgets to the content layout
+        self.layout.add_widget(self.ai_toolbar)
+        self.layout.add_widget(self.chat_scroll)
+        self.layout.add_widget(self.suggestions_container)
+        self.layout.add_widget(input_box)
+        
+        # Add content layout to Screen
+        self.add_widget(self.layout)
         
         self.load_suggestions()
         self.update_theme_colors()
 
     def load_suggestions(self):
-        self.suggestion_list.clear_widgets()
+        self.preset_list.clear_widgets()
+        self.custom_list.clear_widgets()
         app = MDApp.get_running_app()
         d = LANG_DICT[app.current_lang]
         
-        # 1. Preset Suggestions
+        # 1. Preset Suggestions -> Row 1
         presets = [
             (d["sugg_recipe"], d["msg_recipe"]),
             (d["sugg_exercise"], d["msg_exercise"]),
@@ -708,26 +848,112 @@ class AIChatScreen(MDBoxLayout):
         for label, msg in presets:
             btn = SuggestionChip(text=label, message=msg)
             btn.bind(on_release=lambda x, m=msg: self.send_suggestion(m))
-            self.suggestion_list.add_widget(btn)
+            self.preset_list.add_widget(btn)
             
-        # 2. Custom Suggestions from DB
+        # 2. Custom Suggestions from DB -> Row 2
         import database
         customs = database.get_quick_replies()
         for r_id, content in customs:
             label = (content[:8] + '..') if len(content) > 8 else content
             btn = SuggestionChip(text=label, message=content, is_custom=True, reply_id=r_id)
             btn.md_bg_color = [0.9, 0.95, 0.9, 1]
-            btn.bind(on_release=lambda x, m=content: self.send_suggestion(m))
-            self.suggestion_list.add_widget(btn)
+            # Bind normal click to send
+            btn.bind(on_release=self.on_chip_release)
+            self.custom_list.add_widget(btn)
                 
-        # 3. Add Custom Button
+        # 3. Add Custom Button -> Row 2
         add_btn = MDIconButton(icon="plus-circle-outline", theme_text_color="Custom", text_color=[0.5, 0.5, 0.5, 1])
         add_btn.bind(on_release=self.show_add_suggestion_dialog)
-        self.suggestion_list.add_widget(add_btn)
+        self.custom_list.add_widget(add_btn)
+
+    def on_chip_release(self, instance):
+        # Prevent sending message if this was a long-press management action
+        if instance in self._long_press_active_chips:
+            self._long_press_active_chips.remove(instance)
+            return
+        self.send_suggestion(instance.message)
 
     def send_suggestion(self, message):
         self.chat_input.text = message
         self.send_ai_message(None)
+
+    def show_suggestion_mgmt_menu(self, chip):
+        self._long_press_active_chips.add(chip)
+        app = MDApp.get_running_app()
+        d = LANG_DICT[app.current_lang]
+        
+        # Using a custom layout to avoid internal KivyMD list item padding bugs in MDDialog
+        content = MDBoxLayout(orientation='vertical', size_hint_y=None, height=dp(100), spacing=dp(5))
+        edit_btn = MDRaisedButton(
+            text="編輯此詞彙", 
+            pos_hint={'center_x': 0.5},
+            on_release=lambda x: self.open_edit_dialog(chip)
+        )
+        delete_btn = MDRectangleFlatButton(
+            text="刪除此詞彙", 
+            text_color=[0.8, 0, 0, 1],
+            line_color=[0.8, 0, 0, 1],
+            pos_hint={'center_x': 0.5},
+            on_release=lambda x: self.confirm_delete_suggestion(chip)
+        )
+        content.add_widget(edit_btn)
+        content.add_widget(delete_btn)
+
+        self.mgmt_dialog = MDDialog(
+            title="管理快捷訊息",
+            type="custom",
+            content_cls=content,
+            buttons=[MDFlatButton(text=d["cancel"], on_release=lambda x: self.mgmt_dialog.dismiss())]
+        )
+        self.mgmt_dialog.open()
+
+    def open_edit_dialog(self, chip):
+        self.mgmt_dialog.dismiss()
+        app = MDApp.get_running_app()
+        d = LANG_DICT[app.current_lang]
+        self.custom_input = MDTextField(text=chip.message, hint_text=d["ask_ai"], mode="fill", font_name='chinese_font')
+        
+        self.edit_dialog = MDDialog(
+            title="編輯快捷訊息",
+            type="custom",
+            content_cls=MDBoxLayout(self.custom_input, orientation="vertical", size_hint_y=None, height=dp(60)),
+            buttons=[
+                MDFlatButton(text=d["cancel"], on_release=lambda x: self.edit_dialog.dismiss()),
+                MDFlatButton(text=d["save"], on_release=lambda x: self.update_custom_suggestion(chip)),
+            ],
+        )
+        self.edit_dialog.open()
+
+    def update_custom_suggestion(self, chip):
+        new_content = self.custom_input.text.strip()
+        if new_content:
+            import database
+            database.delete_quick_reply(chip.reply_id)
+            database.add_quick_reply(new_content)
+            self.load_suggestions()
+        self.edit_dialog.dismiss()
+
+    def confirm_delete_suggestion(self, chip):
+        self.mgmt_dialog.dismiss()
+        app = MDApp.get_running_app()
+        d = LANG_DICT[app.current_lang]
+        
+        self.del_confirm = MDDialog(
+            title="確認刪除",
+            text=f"確定要刪除「{chip.text}」嗎？",
+            buttons=[
+                MDFlatButton(text=d["cancel"], on_release=lambda x: self.del_confirm.dismiss()),
+                MDFlatButton(text="刪除", theme_text_color="Custom", text_color=[0.8, 0, 0, 1], 
+                             on_release=lambda x: self.delete_custom_suggestion(chip)),
+            ],
+        )
+        self.del_confirm.open()
+
+    def delete_custom_suggestion(self, chip):
+        import database
+        database.delete_quick_reply(chip.reply_id)
+        self.load_suggestions()
+        self.del_confirm.dismiss()
 
     def show_add_suggestion_dialog(self, *args):
         app = MDApp.get_running_app()
@@ -765,47 +991,33 @@ class AIChatScreen(MDBoxLayout):
         msg = self.chat_input.text
         if not msg: return
         
-        # Determine colors based on theme
-        app = MDApp.get_running_app()
-        is_dark = app.theme_cls.theme_style == "Dark"
-        
-        # User Message Item
-        user_item = TwoLineAvatarIconListItem(
-            text="You", 
-            secondary_text=msg
-        )
-        
-        if is_dark:
-             user_item.bg_color = [0.2, 0.2, 0.2, 1] # Dark Gray
-             user_item.theme_text_color = "Custom"
-             user_item.text_color = [1, 1, 1, 1]
-             user_item.secondary_theme_text_color = "Custom"
-             user_item.secondary_text_color = [0.95, 0.95, 0.95, 1]
-        else:
-             # Original Light Mode: Light Gray BG
-             user_item.bg_color = [0.9, 0.9, 0.9, 1]
-             # Reset custom theme colors if necessary or rely on default
-             user_item.theme_text_color = "Primary"
-             user_item.secondary_theme_text_color = "Secondary"
-
-        if is_dark:
-            user_item.theme_text_color = "Custom"
-            user_item.text_color = [1, 1, 1, 1]
-            user_item.secondary_theme_text_color = "Custom"
-            user_item.secondary_text_color = [0.8, 0.8, 0.8, 1]
-        
-        self.chat_list.add_widget(user_item)
+        # Create User Bubble
+        user_bubble = ChatBubble(text=msg, sender="You")
+        self.chat_list.add_widget(user_bubble)
         
         self.chat_input.text = ""
+        self.chat_scroll.scroll_to(user_bubble)
         
-        d = LANG_DICT[app.current_lang]
-        self.chat_list.add_widget(MDLabel(text=d["ai_thinking"], theme_text_color="Secondary", size_hint_y=None, height=dp(30), font_name='chinese_font'))
+        d = LANG_DICT[MDApp.get_running_app().current_lang]
+        
+        # Show thinking bubble temporarily? Or just a label?
+        # A lightweight loading label at bottom
+        self.loading_lbl = MDLabel(
+            text=d["ai_thinking"], 
+            theme_text_color="Secondary", 
+            size_hint_y=None, 
+            height=dp(30), 
+            font_name='chinese_font',
+            halign="center"
+        )
+        self.chat_list.add_widget(self.loading_lbl)
         
         Clock.schedule_once(lambda dt: self.get_ai_response(msg), 0.1)
 
     def get_ai_response(self, msg):
-        if self.chat_list.children:
-             self.chat_list.remove_widget(self.chat_list.children[0])
+        # Remove loading label
+        if hasattr(self, 'loading_lbl') and self.loading_lbl in self.chat_list.children:
+             self.chat_list.remove_widget(self.loading_lbl)
         
         try:
             family_data = database.get_family_members()
@@ -817,31 +1029,12 @@ class AIChatScreen(MDBoxLayout):
             traceback.print_exc()
             response = f"System Error: {str(e)}"
         
-        app = MDApp.get_running_app()
-        is_dark = app.theme_cls.theme_style == "Dark"
-        
-        # AI Response Item
-        ai_item = TwoLineAvatarIconListItem(
-            text="AI Assistant", 
-            secondary_text=response[:100] + "..." if len(response) > 100 else response,
-            on_release=lambda x: self.show_full_response(response)
-        )
-
-        if is_dark:
-            ai_item.bg_color = [0.1, 0.1, 0.1, 1] # Very Dark / Black
-            ai_item.theme_text_color = "Custom"
-            ai_item.text_color = [1, 1, 1, 1]
-            ai_item.secondary_theme_text_color = "Custom"
-            ai_item.secondary_text_color = [0.9, 0.9, 0.9, 1] # High contrast white/grey
-        
-        self.chat_list.add_widget(ai_item)
+        # Create AI Bubble
+        # NO Truncation here!
+        ai_bubble = ChatBubble(text=response, sender="AI Assistant")
+        self.chat_list.add_widget(ai_bubble)
+        # Scroll to bottom
+        Clock.schedule_once(lambda dt: self.chat_scroll.scroll_to(ai_bubble), 0.1)
         
     def show_full_response(self, text):
-        app = MDApp.get_running_app()
-        d = LANG_DICT[app.current_lang]
-        dialog = MDDialog(
-            title=d["ai_recommendation"],
-            text=text,
-            buttons=[MDFillRoundFlatButton(text=d["close"], on_release=lambda x: dialog.dismiss())]
-        )
-        dialog.open()
+        pass # No longer needed as bubbles expand
