@@ -16,3 +16,11 @@ env/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Buildozer
+.buildozer/
+bin/
+
+# Database
+*.db
+*.sqlite3

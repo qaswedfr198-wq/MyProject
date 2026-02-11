@@ -35,10 +35,8 @@ class ChatRequest(BaseModel):
     message: str
     family_data: Optional[str] = ""
     inventory_data: Optional[str] = ""
+    equipment_data: Optional[str] = ""
 
-class RecommendRequest(BaseModel):
-    family_data: str
-    inventory_data: str
 
 class CalorieRequest(BaseModel):
     food_name: str
@@ -66,6 +64,9 @@ async def chat(request: ChatRequest):
     Current Inventory items availability:
     {request.inventory_data}
     
+    Current Kitchen Equipment:
+    {request.equipment_data}
+    
     User Question: {request.message}
     
     **Health Guidelines & Warnings**:
@@ -84,40 +85,7 @@ async def chat(request: ChatRequest):
         print(f"[ERROR] AI Chat Exception: {str(e)}")
         raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
 
-@app.post("/recommend")
-async def recommend(request: RecommendRequest):
-    api_key = configure_genai()
-    if not api_key:
-        print("[ERROR] GEMINI_API_KEY IS MISSING IN ENVIRONMENT.")
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server")
-    
-    print("[INFO] New recommendation request (Gemini 2.5 Flash).")
-    model = genai.GenerativeModel('gemini-2.5-flash')
-    
-    prompt = f"""
-    You are a professional Nutritionist and Home Manager AI.
-    
-    Current Family Profile:
-    {request.family_data}
-    
-    Current Inventory:
-    {request.inventory_data}
-    
-    Based on the family's health conditions (Genetic diseases, Allergens) and the current inventory:
-    1. Suggest a shopping list of essential healthy items missing.
-    2. Suggest 1-2 simple recipes using current inventory (Avoid allergens!).
-    3. Warn about any expired or near-expiry items.
-    
-    Keep the response concise and formatted as a checklist.
-    """
-    
-    try:
-        response = await model.generate_content_async(prompt)
-        print("[INFO] AI Recommendation successful.")
-        return {"recommendation": response.text}
-    except Exception as e:
-        print(f"[ERROR] AI Recommend Exception: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
+
 
 @app.post("/vision")
 async def vision_recognition(file: UploadFile = File(...)):

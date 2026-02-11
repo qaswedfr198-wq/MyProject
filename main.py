@@ -21,16 +21,27 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def setup_chinese_font():
-    font_path = r'C:\Windows\Fonts\msjh.ttc'
+    base_path = os.path.abspath(os.path.dirname(__file__))
+    font_path = os.path.join(base_path, 'assets', 'fonts', 'msjh.ttc')
+    font_path_bold = os.path.join(base_path, 'assets', 'fonts', 'msjhbd.ttc')
     # 註冊字體別名
     try:
-        LabelBase.register(name='chinese_font', fn_regular=font_path)
+        LabelBase.register(name='chinese_font', fn_regular=font_path, fn_bold=font_path_bold)
+        
+        # 核心解決方案：強制覆蓋 KivyMD 預設的 Roboto 字體
+        # 這能解決 MDTextField hint_text 和按鈕在某些情況下忽略 font_name 的問題
+        LabelBase.register(name='Roboto', fn_regular=font_path, fn_bold=font_path_bold)
+        LabelBase.register(name='Roboto-Bold', fn_regular=font_path_bold) 
+        
+        print(f"Registered font: {font_path}")
     except Exception as e:
         print(f"Error loading font: {e}")
 
 
-# Set Window size to mimic mobile for testing on PC
-Window.size = (400, 750)
+# Set Window size to mimic mobile for testing on PC (only if not on Android)
+from kivy.utils import platform
+if platform != 'android':
+    Window.size = (400, 750)
 
 class MainApp(MDApp):
     def build(self):
@@ -74,19 +85,18 @@ class MainApp(MDApp):
         )
         self.inventory_view = ui.screens.InventoryScreen()
         self.screen_inv.add_widget(self.inventory_view)
-
+        # Unified binding style
+        self.screen_inv.bind(on_enter=self.inventory_view.on_enter)
+        
         # Screen 3: Calories
         self.screen_cal = MDBottomNavigationItem(
             name="screen_cal",
             text=LANG_DICT[self.current_lang]["calories"],
             icon="fire",
         )
-        self.calories_db = calories.DatabaseManager()
-        # Initialize dummy data if empty
-        if self.calories_db.get_today_total() == 0:
-             self.calories_db.add_record('breakfast', 400) # dummy
-
-        self.calories_view = calories.MainInterface(self.calories_db)
+        
+        # Database logic moved to unified database.py, no need to instantiate manager here
+        self.calories_view = calories.MainInterface()
         self.screen_cal.add_widget(self.calories_view)
         
         # Screen 4: AI Chat
@@ -98,11 +108,24 @@ class MainApp(MDApp):
         
         self.ai_layout = ui.screens.AIChatScreen()
         self.screen_ai.add_widget(self.ai_layout)
+        # Fix: Bind on_enter to auto-load today's history
+        self.screen_ai.bind(on_enter=self.ai_layout.on_enter)
         
+        # Screen 5: Recommended Recipes
+        self.screen_rec = MDBottomNavigationItem(
+            name="screen_rec",
+            text=LANG_DICT[self.current_lang]["rec_recipes"],
+            icon="silverware-variant",
+        )
+        self.rec_view = ui.screens.RecipeRecommendationScreen()
+        self.screen_rec.add_widget(self.rec_view)
+        self.screen_rec.bind(on_enter=self.rec_view.on_enter)
+
         self.nav.add_widget(self.screen_family)
         self.nav.add_widget(self.screen_inv)
         self.nav.add_widget(self.screen_cal)
         self.nav.add_widget(self.screen_ai)
+        self.nav.add_widget(self.screen_rec)
         
         # Wrap nav in MainScreen
         self.main_screen = ui.screens.MainScreen(name="main")
@@ -240,6 +263,10 @@ class MainApp(MDApp):
         # AI Chat View
         self.ai_layout.update_theme_colors()
 
+        # Recommendation View
+        if hasattr(self, 'rec_view'):
+            self.rec_view.update_theme_colors()
+
         # Calories View
         if hasattr(self, 'calories_view'):
             self.calories_view.update_theme_colors()
@@ -263,11 +290,22 @@ class MainApp(MDApp):
         self.screen_inv.text = d["inventory"]
         self.screen_cal.text = d["calories"]
         self.screen_ai.text = d["chat"]
+        if hasattr(self, 'screen_rec'):
+            self.screen_rec.text = d["rec_recipes"]
         
         # Update Toolbars
-        self.family_view.toolbar.title = d["family"]
-        self.inventory_view.toolbar.title = d["inventory"]
-        self.ai_layout.ai_toolbar.title = d["chat"]
+        if hasattr(self.family_view, 'title_label'):
+            self.family_view.title_label.text = d["family"]
+
+        if hasattr(self.inventory_view, 'title_label'):
+            self.inventory_view.title_label.text = d["inventory"]
+        
+        if hasattr(self.ai_layout, 'title_label'):
+            # AIChatScreen title might include date, but on lang change we reset or refresh
+            self.ai_layout.title_label.text = d["chat"]
+
+        if hasattr(self, 'rec_view') and hasattr(self.rec_view, 'title_label'):
+            self.rec_view.title_label.text = d["rec_recipes"]
         
         # Update Specific Search/Input hints
         self.ai_layout.chat_input.hint_text = d["ask_ai"]
@@ -276,7 +314,7 @@ class MainApp(MDApp):
         self.family_view.load_data()
         self.inventory_view.load_data()
         if hasattr(self, 'calories_view'):
-            self.calories_view.toolbar.title = d["calories"]
+            # Calorie screen title is date-based, refresh_ui handles it
             self.calories_view.refresh_ui()
         
         # Re-initialize dialogs on next open to use new language

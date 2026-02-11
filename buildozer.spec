@@ -31,7 +31,7 @@ version = 0.1
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy==2.3.0,kivymd,plyer,pillow,google-generativeai,requests,certifi,urllib3,idna,charset-normalizer
+requirements = python3,kivy==2.3.0,kivymd,plyer,pillow,google-generativeai,requests,certifi,urllib3,idna,charset-normalizer,matplotlib,python-dotenv,pg8000,scramp
 
 # (str) Custom source folders for requirements
 # packgage.source.kivymd = ../../kivymd
@@ -52,13 +52,16 @@ orientation = portrait
 android.archs = arm64-v8a, armeabi-v7a
 
 # (list) Android permissions
-android.permissions = INTERNET, CAMERA, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+android.permissions = INTERNET, CAMERA, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, ACCESS_NETWORK_STATE
 
-# (int) Android API to use
-#android.api = 33
+# (int) Target Android API, should be as high as possible (specific to each NDK)
+android.api = 34
 
 # (int) Minimum API your APK will support.
-android.minapi = 21
+android.minapi = 24
+
+# (bool) Automatic SDK license acceptance
+android.accept_sdk_license = True
 
 # (str) Android NDK version to use
 #android.ndk = 25b

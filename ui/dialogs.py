@@ -70,16 +70,33 @@ class PickerSheet(ModalView):
         self.dismiss()
 
 class AddMemberSheet(ModalView):
-    def __init__(self, save_callback, **kwargs):
+    def __init__(self, save_callback, member_data=None, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (1, 1) # Full screen or almost full
         self.background = ""
         self.save_callback = save_callback
+        self.member_data = member_data # If not None, we are editing
         
         # Data
-        self.gender = "M"
-        self.height_val = 170
-        self.weight_val = 60.0
+        if member_data:
+            # member_data: (id, name, age, gender, allergens, genetic, height, weight)
+            self.member_id = member_data[0]
+            self.gender = member_data[3]
+            self.height_val = member_data[6] or 0
+            self.weight_val = member_data[7] or 0
+            self.initial_name = member_data[1]
+            self.initial_age = str(member_data[2])
+            self.initial_allergens = member_data[4]
+            self.initial_genetic = member_data[5]
+        else:
+            self.member_id = None
+            self.gender = "M"
+            self.height_val = 170
+            self.weight_val = 60.0
+            self.initial_name = ""
+            self.initial_age = ""
+            self.initial_allergens = ""
+            self.initial_genetic = ""
         
         # Initialize UI first, then apply colors
         self.layout = MDBoxLayout(orientation='vertical', padding=dp(20), spacing=dp(20))
@@ -100,20 +117,22 @@ class AddMemberSheet(ModalView):
         self.content_box.bind(minimum_height=self.content_box.setter('height'))
         
         # Name
-        self.name_field = MDTextField(mode="rectangle", font_name='chinese_font', font_name_hint_text='chinese_font')
+        self.name_field = MDTextField(text=self.initial_name, mode="rectangle", font_name='chinese_font', font_name_hint_text='chinese_font')
         self.content_box.add_widget(self.name_field)
         
         # Age
-        self.age_field = MDTextField(mode="rectangle", input_filter="int", font_name='chinese_font', font_name_hint_text='chinese_font')
+        self.age_field = MDTextField(text=self.initial_age, mode="rectangle", input_filter="int", font_name='chinese_font', font_name_hint_text='chinese_font')
         self.content_box.add_widget(self.age_field)
         
         # Gender
-        self.gender_box = MDBoxLayout(orientation='vertical', size_hint_y=None, height=dp(140), spacing=dp(10))
+        self.gender_box = MDBoxLayout(orientation='vertical', size_hint_y=None, height=dp(200), spacing=dp(10))
         self.gender_label = MDLabel(bold=True, theme_text_color="Custom")
         self.gender_box.add_widget(self.gender_label)
         self.gender_box.add_widget(Widget(size_hint_y=None, height=dp(20)))
         
         self.gender_selector = components.GenderSelector()
+        # Pre-select gender
+        self.gender_selector.gender = self.gender 
         self.gender_selector.bind(gender=self.on_gender_change)
         self.gender_box.add_widget(self.gender_selector)
         self.content_box.add_widget(self.gender_box)
@@ -131,7 +150,7 @@ class AddMemberSheet(ModalView):
         
         # Weight Row
         self.weight_item = TwoLineAvatarIconListItem(
-            secondary_text=f"{self.weight_val} kg",
+            secondary_text=f"{self.weight_val:.1f} kg",
             theme_text_color="Custom",
             secondary_theme_text_color="Custom",
             on_release=self.open_weight_picker
@@ -141,11 +160,11 @@ class AddMemberSheet(ModalView):
         self.content_box.add_widget(self.weight_item)
         
         # Allergens
-        self.allergens_field = MDTextField(mode="rectangle", font_name='chinese_font', font_name_hint_text='chinese_font')
+        self.allergens_field = MDTextField(text=self.initial_allergens, mode="rectangle", font_name='chinese_font', font_name_hint_text='chinese_font')
         self.content_box.add_widget(self.allergens_field)
         
         # Genetic
-        self.genetic_field = MDTextField(mode="rectangle", font_name='chinese_font', font_name_hint_text='chinese_font')
+        self.genetic_field = MDTextField(text=self.initial_genetic, mode="rectangle", font_name='chinese_font', font_name_hint_text='chinese_font')
         self.content_box.add_widget(self.genetic_field)
         
         self.content_box.add_widget(MDBoxLayout(size_hint_y=None, height=dp(20)))
@@ -166,7 +185,11 @@ class AddMemberSheet(ModalView):
         text_color = [1, 1, 1, 1] if is_dark else [0.2, 0.2, 0.2, 1]
         
         # Update Text Content
-        self.title_lbl.text = d["new_member"]
+        if self.member_id:
+             self.title_lbl.text = "編輯成員" # Need localization key ideally, e.g. d.get("edit_member", "編輯成員")
+        else:
+             self.title_lbl.text = d["new_member"]
+
         self.name_field.hint_text = d["name"]
         self.age_field.hint_text = d["age"]
         self.gender_label.text = d["gender"]
@@ -231,7 +254,9 @@ class AddMemberSheet(ModalView):
         except ValueError:
             age = 0
         
+        # CALLBACK NOW INCLUDES MEMBER_ID (None for new, ID for edit)
         self.save_callback(
+            self.member_id,
             name, 
             age,
             self.gender,

@@ -5,7 +5,8 @@ pillow
 google-generativeai
 requests
 certifi
-psycopg2-binary
+pg8000
+scramp
 python-dotenv
 fastapi
 uvicorn

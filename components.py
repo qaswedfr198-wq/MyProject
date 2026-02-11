@@ -41,47 +41,7 @@ Builder.load_string('''
             points: [self.center_x, self.y, self.center_x, self.top]
             width: dp(2)
 
-<GenderItem>:
-    elevation: 0
-    radius: [20]
-    md_bg_color: 
-        ([0.2, 0.2, 0.2, 1] if app.theme_cls.theme_style == "Light" else [1, 1, 1, 1]) \
-        if self.selected else \
-        (app.theme_cls.bg_normal if app.theme_cls.theme_style == "Light" else [0.12, 0.12, 0.12, 1])
-    
-    orientation: 'vertical'
-    padding: "10dp"
-    
-    canvas.before:
-        Color:
-            rgba: 
-                [0.8, 0.8, 0.8, 0.5] if not self.selected else [0, 0, 0, 0]
-        Line:
-            width: dp(1)
-            rounded_rectangle: (self.x, self.y, self.width, self.height, 20)
 
-    MDIcon:
-        icon: root.icon_name
-        halign: "center"
-        theme_text_color: "Custom"
-        text_color: 
-            ([0, 0, 0, 1] if app.theme_cls.theme_style == "Light" else [1, 1, 1, 1]) \
-            if root.selected else ([0.4, 0.4, 0.4, 1] if app.theme_cls.theme_style == "Light" else [0.7, 0.7, 0.7, 1])
-        font_size: "48sp"
-        size_hint_y: None
-        height: dp(50)
-    
-    MDLabel:
-        text: root.text
-        halign: "center"
-        bold: True
-        theme_text_color: "Custom"
-        text_color: 
-            ([0, 0, 0, 1] if app.theme_cls.theme_style == "Light" else [1, 1, 1, 1]) \
-            if root.selected else ([0.4, 0.4, 0.4, 1] if app.theme_cls.theme_style == "Light" else [0.7, 0.7, 0.7, 1])
-        font_name: 'chinese_font'
-        size_hint_y: None
-        height: dp(30)
 ''')
 
 class VerticalScalePicker(Widget):
@@ -275,78 +235,39 @@ class HorizontalScalePicker(Widget):
 
 
 class GenderItem(MDCard):
-    """
-    Remove separate ButtonBehavior inheriting.
-    MDCard already supports ripple and on_release if ripple_behavior is True (default for some styles)
-    or if we use specific behavior mixins. 
-    However, Standard MDCard inherits from RectangularRippleBehavior + FloatLayout.
-    If we want click events, we usually ensure ripple_behavior is enabled or bind on_touch_down carefully.
-    
-    Actually in KivyMD 1.x MDCard:
-    class MDCard(RectangularRippleBehavior, CommonElevationBehavior, FloatLayout):
-    
-    So it HAS ripple behavior. But to get 'on_release', we might need to enable it or check collision.
-    Actually MDCard does not emit 'on_release' by default unless it's a clickable card type or we mix in ButtonBehavior.
-    BUT, mixing ButtonBehavior + MDCard (which has Ripple) caused the MRO issue.
-    
-    Solution: Just use MDCard and bind on_release? No, MDCard doesn't have on_release event unless it inherits ButtonBehavior.
-    
-    Alternative: Subclass ButtonBehavior + FloatLayout instead of MDCard if we just want a box? 
-    OR: Rely on MDCard's on_touch_down/up to dispatch a custom event?
-    
-    Let's try standard ButtonBehavior MIXED improperly caused issues?
-    The error was: `Cannot create a consistent method resolution order (MRO) for bases ButtonBehavior, MDCard`.
-    
-    This is because MDCard likely inherits from something that conflicts with ButtonBehavior's place in MRO relative to other bases.
-    
-    Let's try using `MDCard` replacing `ButtonBehavior`.
-    Actually, `MDCard` has `on_release` if `ripple_behavior=True`? No, it's just visual.
-    
-    Correct approach in KivyMD for clickable card:
-    Use `MDCard` and bind `on_touch_down`. Or use `MDCard` with `focus_behavior=True`?
-    
-    Let's checking KivyMD docs mentally...
-    Usually `class MyCard(MDCard):` works fine for clicks if you just bind `on_turn`.
-    
-    Wait, `ButtonBehavior` + `BoxLayout` is the standard way to make a layout clickable.
-    MDCard is a FloatLayout.
-    
-    Let's go with `class GenderItem(MDCard):` and add `on_touch_down` logic OR just use `MDCard` and hope `on_release` works (it often does not without ButtonBehavior).
-    
-    Let's try `from kivymd.uix.behaviors import CommonElevationBehavior` etc? No.
-    
-    Let's Stick to `MDCard`. I will add a simple `on_touch_down` handler if needed, or stick to `ButtonBehavior` but put it AFTER `MDCard`? 
-    `class GenderItem(MDCard, ButtonBehavior):` -> MRO error?
-    `class GenderItem(ButtonBehavior, MDCard):` -> MRO error?
-    
-    Let's try: `class GenderItem(MDCard):` and manually implement `on_touch_down`.
-    Actually, let's look at `MDCard` source (mental check).
-    It inherits `RectangularRippleBehavior`.
-    `RectangularRippleBehavior` inherits `CommonRipple`.
-    
-    If I want `on_release`, I can use `ButtonBehavior` with `BoxLayout` instead of `MDCard`, and just style it like a card.
-    BUT `GenderItem` uses `elevation`.
-    
-    Let's try `class GenderItem(MDCard):` and add `on_touch_down` to dispatch `on_release`?
-    Or simpler: The implementation in `GenderSelector` binds `on_release`.
-    
-    Let's just use `ButtonBehavior` + `BoxLayout` (or `MDBoxLayout`) and manually add background/elevation if needed?
-    Or just `MDCard` and use `on_touch_down`.
-    
-    Wait, the simplest fix for MRO with MDCard is often:
-    `class ClickableCard(MDCard)`
-    and inside:
-    `def on_touch_down(self, touch): ... if collide ... dispatch('on_release') ...`
-    
-    Actually, let's look at the failing code again.
-    `class GenderItem(ButtonBehavior, MDCard):`
-    
-    I will change it to `class GenderItem(MDCard):` and add a click handler.
-    """
     icon_name = StringProperty("account")
     text = StringProperty("")
     selected = BooleanProperty(False)
     
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.elevation = 0
+        self.radius = [12]
+        self.padding = dp(10)
+        self.spacing = dp(5)
+        self.orientation = 'vertical'
+        self.ripple_behavior = True
+        self.bind(selected=self.update_color)
+        self.update_color()
+
+    def update_color(self, *args):
+        app = MDApp.get_running_app()
+        is_dark = app.theme_cls.theme_style == "Dark"
+        
+        # Selected: Sage Green / Text White
+        # Unselected: Transparent / Text Gray
+        if self.selected:
+            self.md_bg_color = [0.56, 0.74, 0.56, 1] # Simple Sage Green
+            self.line_color = [0, 0, 0, 0]
+            text_col = [1, 1, 1, 1]
+        else:
+            self.md_bg_color = [0, 0, 0, 0]
+            self.line_color = [0.8, 0.8, 0.8, 1] if not is_dark else [0.3, 0.3, 0.3, 1]
+            text_col = [0.5, 0.5, 0.5, 1]
+
+        self.ids.icon.text_color = text_col
+        self.ids.label.text_color = text_col
+
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
             self.dispatch('on_release')
@@ -355,14 +276,30 @@ class GenderItem(MDCard):
 
     def on_release(self):
         pass
-
-    # Register event type if not present?
-    # MDCard doesn't have on_release event by default.
-    # We must register it.
+        
+Builder.load_string('''
+<GenderItem>:
+    size_hint_y: None
+    height: dp(100)
+    line_width: 1.2
     
-    def __init__(self, **kwargs):
-        self.register_event_type('on_release')
-        super().__init__(**kwargs)
+    MDIcon:
+        id: icon
+        icon: root.icon_name
+        halign: "center"
+        pos_hint: {'center_x': 0.5}
+        theme_text_color: "Custom"
+        font_size: "40sp"
+    
+    MDLabel:
+        id: label
+        text: root.text
+        halign: "center"
+        bold: True
+        theme_text_color: "Custom"
+        font_name: 'chinese_font'
+        font_style: "Caption"
+''')
 
 class GenderSelector(BoxLayout):
     gender = StringProperty("M") # M or F
