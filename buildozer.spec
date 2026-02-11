@@ -31,7 +31,7 @@ version = 0.1
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy==2.2.0,kivymd,plyer,pillow,google-generativeai,requests,certifi,urllib3,idna,charset-normalizer,matplotlib,python-dotenv,pg8000
+requirements = python3,kivy==2.2.0,kivymd,plyer,pillow,google-generativeai,requests,certifi,urllib3,idna,charset-normalizer,matplotlib,python-dotenv,pg8000,scramp
 
 # (str) Custom source folders for requirements
 # packgage.source.kivymd = ../../kivymd
